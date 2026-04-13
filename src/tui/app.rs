@@ -213,7 +213,22 @@ impl App {
                         Some(Ok(Event::Key(key))) => {
                             self.handle_key(key, terminal).await?;
 
-                            terminal.draw(|f| self.render(f))?;
+                            // Check for creation results after key handling so
+                            // the async CreationPoller path isn't starved by
+                            // continuous input events (mouse moves, etc.)
+                            // that `continue` past the periodic refresh section.
+                            if let Some(session_id) = self.home.apply_creation_results() {
+                                self.attach_session(&session_id, terminal)?;
+                            }
+
+                            // Skip the draw when returning from tmux attach
+                            // (handle_key sync path or creation result above).
+                            // needs_redraw triggers a clear + stale event drain
+                            // on the next iteration; drawing before that drain
+                            // wastes a frame and can flicker.
+                            if !self.needs_redraw {
+                                terminal.draw(|f| self.render(f))?;
+                            }
 
                             if self.should_quit {
                                 break;
@@ -223,7 +238,13 @@ impl App {
                         Some(Ok(Event::Mouse(mouse))) => {
                             self.handle_mouse(mouse, terminal).await?;
 
-                            terminal.draw(|f| self.render(f))?;
+                            if let Some(session_id) = self.home.apply_creation_results() {
+                                self.attach_session(&session_id, terminal)?;
+                            }
+
+                            if !self.needs_redraw {
+                                terminal.draw(|f| self.render(f))?;
+                            }
 
                             continue;
                         }

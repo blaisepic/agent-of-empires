@@ -185,7 +185,7 @@ pub async fn run(profile: &str, args: AddArgs) -> Result<()> {
         None
     };
 
-    // Generate title
+    // Generate title: use provided title, or branch name for worktree sessions, or random civ
     let final_title = if let Some(title) = &args.title {
         let trimmed_title = title.trim();
         if is_duplicate_session(&instances, trimmed_title, path.to_str().unwrap_or("")) {
@@ -196,6 +196,16 @@ pub async fn run(profile: &str, args: AddArgs) -> Result<()> {
             return Ok(());
         }
         trimmed_title.to_string()
+    } else if let Some(ref branch) = args.worktree_branch {
+        let branch_title = branch.trim().to_string();
+        if is_duplicate_session(&instances, &branch_title, path.to_str().unwrap_or("")) {
+            println!(
+                "Session already exists with same title and path: {}",
+                branch_title
+            );
+            return Ok(());
+        }
+        branch_title
     } else {
         let existing_titles: Vec<&str> = instances.iter().map(|i| i.title.as_str()).collect();
         civilizations::generate_random_title(&existing_titles)

@@ -13,7 +13,7 @@ use ratatui::{
 use similar::ChangeTag;
 
 use super::DiffView;
-use crate::git::diff::FileStatus;
+use crate::git::diff::{ConflictSide, FileStatus};
 use crate::tui::styles::Theme;
 
 /// Truncate a string from the left, adding an ellipsis prefix if it doesn't fit.
@@ -165,6 +165,7 @@ impl DiffView {
                     FileStatus::Renamed => theme.diff_header,
                     FileStatus::Copied => theme.diff_header,
                     FileStatus::Untracked => theme.dimmed,
+                    FileStatus::Conflicted => theme.diff_modified,
                 };
 
                 let style = if is_selected {
@@ -256,10 +257,21 @@ impl DiffView {
                     )));
 
                     for line in &hunk.lines {
-                        let (prefix, style) = match line.tag {
-                            ChangeTag::Delete => ("-", Style::default().fg(theme.diff_delete)),
-                            ChangeTag::Insert => ("+", Style::default().fg(theme.diff_add)),
-                            ChangeTag::Equal => (" ", Style::default().fg(theme.dimmed)),
+                        let (prefix, style) = match line.conflict_side {
+                            Some(ConflictSide::OursMarker) | Some(ConflictSide::Ours) => {
+                                ("-", Style::default().fg(theme.diff_delete))
+                            }
+                            Some(ConflictSide::Separator) => {
+                                (" ", Style::default().fg(theme.diff_header))
+                            }
+                            Some(ConflictSide::Theirs) | Some(ConflictSide::TheirsMarker) => {
+                                ("+", Style::default().fg(theme.diff_add))
+                            }
+                            None => match line.tag {
+                                ChangeTag::Delete => ("-", Style::default().fg(theme.diff_delete)),
+                                ChangeTag::Insert => ("+", Style::default().fg(theme.diff_add)),
+                                ChangeTag::Equal => (" ", Style::default().fg(theme.dimmed)),
+                            },
                         };
 
                         let old_num = line

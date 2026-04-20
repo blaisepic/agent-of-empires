@@ -359,7 +359,18 @@ pub fn compute_file_diff(
         .unwrap_or_default();
 
     // Determine file status
-    let status = if old_content.is_empty() && !new_content.is_empty() {
+    let index = repo.index()?;
+    let is_conflicted = index.has_conflicts()
+        && index.conflicts()?.any(|c| {
+            c.ok()
+                .and_then(|c| c.our.or(c.their).or(c.ancestor))
+                .and_then(|e| std::str::from_utf8(&e.path).ok().map(|p| Path::new(p) == file_path))
+                .unwrap_or(false)
+        });
+
+    let status = if is_conflicted {
+        FileStatus::Conflicted
+    } else if old_content.is_empty() && !new_content.is_empty() {
         FileStatus::Added
     } else if !old_content.is_empty() && new_content.is_empty() && !full_path.exists() {
         FileStatus::Deleted
@@ -1021,6 +1032,7 @@ mod tests {
         let (dir, _repo) = setup_conflict_repo();
         let diff = compute_file_diff(dir.path(), Path::new("conflicted.txt"), "main", 3).unwrap();
 
+        assert_eq!(diff.file.status, FileStatus::Conflicted);
         assert!(!diff.hunks.is_empty(), "Should produce hunks for conflicted file");
 
         let all_content: String = diff
